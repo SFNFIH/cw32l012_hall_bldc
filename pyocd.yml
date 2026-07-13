@@ -1,0 +1,6 @@
+# pyOCD configuration for DAPLink / CMSIS-DAP
+frequency: 100000
+target: cortex_m
+# If pyOCD cannot auto-detect the target, uncomment and set your pack path:
+# pack:
+#   - "path/to/WHXY.CW32L012_DFP.x.x.x.pack"

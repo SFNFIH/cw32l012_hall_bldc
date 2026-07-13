@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Debug",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "${workspaceFolder}/build/Debug"],
+            "group": "build",
+            "presentation": { "reveal": "always" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Flash CW32 (pyOCD)",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "cd /d ${workspaceFolder} && cmake --build build/Debug && python flash_cw32.py build/Debug/cw32l012_pwm_dma.elf"
+            ],
+            "group": "build",
+            "presentation": { "reveal": "always" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Flash CW32 Release (pyOCD)",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "cd /d ${workspaceFolder} && cmake --build build/Release && python flash_cw32.py build/Release/cw32l012_pwm_dma.elf"
+            ],
+            "group": "build",
+            "presentation": { "reveal": "always" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Flash CW32 (pyOCD, 仅烧录不编译)",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "cd /d ${workspaceFolder} && python flash_cw32.py build/Debug/cw32l012_pwm_dma.elf"
+            ],
+            "group": "build",
+            "presentation": { "reveal": "always" },
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,0 +1,60 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "pyOCD Debug (DAPLink)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "pyocd",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/cw32l012_pwm_dma.elf",
+            "svdFile": "${workspaceFolder}/cw32l012.svd",
+            "gdbPath": "arm-none-eabi-gdb.exe",
+            "toolchainPath": "E:/STM32_Projects/arm-gnu-toolchain-15.2.rel1-mingw-w64-x86_64-arm-none-eabi/bin",
+            "armToolchainPath": "E:/STM32_Projects/arm-gnu-toolchain-15.2.rel1-mingw-w64-x86_64-arm-none-eabi/bin",
+            "serverpath": "pyocd",
+            "preLaunchTask": "Flash CW32 (pyOCD)",
+            "overrideGDBServerPort": 0,
+            "overrideGDBServerStartedRegex": "GDB server listening",
+            "preLaunchCommands": [
+                "monitor reset halt"
+            ],
+            "runToEntryPoint": "main"
+        },
+        {
+            "name": "pyOCD Debug Release (DAPLink)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "pyocd",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Release/cw32l012_pwm_dma.elf",
+            "svdFile": "${workspaceFolder}/cw32l012.svd",
+            "gdbPath": "arm-none-eabi-gdb.exe",
+            "toolchainPath": "E:/STM32_Projects/arm-gnu-toolchain-15.2.rel1-mingw-w64-x86_64-arm-none-eabi/bin",
+            "armToolchainPath": "E:/STM32_Projects/arm-gnu-toolchain-15.2.rel1-mingw-w64-x86_64-arm-none-eabi/bin",
+            "serverpath": "pyocd",
+            "preLaunchTask": "Flash CW32 Release (pyOCD)",
+            "overrideGDBServerPort": 0,
+            "overrideGDBServerStartedRegex": "GDB server listening",
+            "preLaunchCommands": [
+                "monitor reset halt"
+            ],
+            "runToEntryPoint": "main"
+        },
+        {
+            "name": "pyOCD Attach (DAPLink, 不烧录)",
+            "type": "cortex-debug",
+            "request": "attach",
+            "servertype": "pyocd",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/cw32l012_pwm_dma.elf",
+            "svdFile": "${workspaceFolder}/cw32l012.svd",
+            "gdbPath": "arm-none-eabi-gdb.exe",
+            "toolchainPath": "E:/STM32_Projects/arm-gnu-toolchain-15.2.rel1-mingw-w64-x86_64-arm-none-eabi/bin",
+            "armToolchainPath": "E:/STM32_Projects/arm-gnu-toolchain-15.2.rel1-mingw-w64-x86_64-arm-none-eabi/bin",
+            "serverpath": "pyocd",
+            "overrideGDBServerPort": 0,
+            "overrideGDBServerStartedRegex": "GDB server listening"
+        }
+    ]
+}
