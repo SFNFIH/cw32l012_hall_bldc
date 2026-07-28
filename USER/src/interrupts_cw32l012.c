@@ -211,7 +211,6 @@ void GPIOF_IRQHandler(void)
 void DMACH12_IRQHandler(void)
 {
     /* USER CODE BEGIN */
-    DMACH12_IRQHandlerCallBack();
     /* USER CODE END */
 }
 
@@ -340,7 +339,7 @@ void BTIM2_IRQHandler(void)
 void BTIM3_HALLTIM_IRQHandler(void)
 {
     /* USER CODE BEGIN */
-
+    BSP_HALLTIM_IRQHandler();
     /* USER CODE END */
 }
 

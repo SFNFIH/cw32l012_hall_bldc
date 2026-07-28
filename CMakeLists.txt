@@ -31,6 +31,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Libraries/inc
     USER/inc
     Board
+    BSP
 )
 
 # Add project symbols (macros)
@@ -46,7 +47,10 @@ list(REMOVE_ITEM DRIVER_SOURCES "${CMAKE_SOURCE_DIR}/Libraries/src/system_cw32l0
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     startup_cw32l012x8.s
-    Board/cw32l012_startkit.c
+    BSP/BSP_led.c
+    BSP/BSP_usart.c
+    BSP/BSP_halltim.c
+    BSP/BSP_motor.c
     USER/src/main.c
     USER/src/interrupts_cw32l012.c
     USER/src/system_cw32l012_override.c

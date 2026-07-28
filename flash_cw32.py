@@ -139,8 +139,8 @@ def main():
             print(f"  Verify PC=0x{pc:08X} (Reset_Handler)")
 
         if ok:
-            t.reset_and_halt()
-            print("DONE. Ready to debug.")
+            t.reset()          # 复位并自动运行 (不再 halt)
+            print("DONE. Target running.")
         else:
             print("FLASH PROGRAMMING FAILED!")
 
