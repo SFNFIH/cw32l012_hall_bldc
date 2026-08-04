@@ -35,7 +35,15 @@ void BSP_USART_Init(uint32_t pclk_hz, uint32_t baud)
     brr = (pclk_hz + (baud >> 1)) / baud;
     BSP_USART->BRRI = (uint16_t)(brr >> 4);
     BSP_USART->BRRF = (uint16_t)(brr & 0x0FU);
-    BSP_USART->CR1  = UARTx_CR1_TXEN_Msk | UARTx_CR1_RXEN_Msk;
+
+#if (BSP_USART_PIN_SWAP != 0U)
+    /* 硬件 TX/RX 引脚交换 (UARTx_CR2.SWAP) */
+    BSP_USART->CR2 |= UARTx_CR2_SWAP_Msk;
+#else
+    BSP_USART->CR2 &= ~UARTx_CR2_SWAP_Msk;
+#endif
+
+    BSP_USART->CR1 = UARTx_CR1_TXEN_Msk | UARTx_CR1_RXEN_Msk;
 }
 
 void BSP_USART_DeInit(void)

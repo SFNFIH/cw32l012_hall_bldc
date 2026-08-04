@@ -1,6 +1,6 @@
 /**
  * @file    BSP_led.c
- * @brief   LED 驱动实现 (PC13)
+ * @brief   LED 驱动实现 (PB09)
  */
 #include "BSP_led.h"
 
@@ -12,6 +12,7 @@ void BSP_LED_Init(void)
     BSP_LED1_AF();
 
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.IT   = GPIO_IT_NONE;
     GPIO_InitStruct.Pins = BSP_LED1_PIN;
     GPIO_Init(BSP_LED1_PORT, &GPIO_InitStruct);
 

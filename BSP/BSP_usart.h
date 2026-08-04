@@ -1,8 +1,9 @@
 /**
  * @file    BSP_usart.h
- * @brief   板载调试串口 (原理图 U1: UART1, PC15=TXD, PC14=RXD)
- * @note    网表中连接器脚标 TX/RX 按外部适配器命名:
- *          U1-TX(PC14) = MCU UART1_RXD, U1-RX(PC15) = MCU UART1_TXD
+ * @brief   板载调试串口 (UART1: PC15/PC14)
+ * @note    使能 CR2.SWAP: 引脚收发对调
+ *          MCU PC15 = UART RX (接适配器 TX)
+ *          MCU PC14 = UART TX (接适配器 RX)
  */
 #ifndef BSP_USART_H
 #define BSP_USART_H
@@ -24,17 +25,19 @@ extern "C" {
 #define BSP_USART_RST_ENABLE()        __SYSCTRL_UART1_RST_ENABLE()
 #define BSP_USART_RST_DISABLE()       __SYSCTRL_UART1_RST_DISABLE()
 
-/* MCU TX: PC15 -> 连接器 RX */
+/* AF 仍按默认: PC15=TXD复用, PC14=RXD复用; 实际收发由 CR2.SWAP 对调 */
 #define BSP_USART_TX_PIN              GPIO_PIN_15
 #define BSP_USART_TX_PORT             CW_GPIOC
 #define BSP_USART_TX_AF()             PC15_AFx_UART1TXD()
 #define BSP_USART_TX_CLK_ENABLE()     __SYSCTRL_GPIOC_CLK_ENABLE()
 
-/* MCU RX: PC14 <- 连接器 TX */
 #define BSP_USART_RX_PIN              GPIO_PIN_14
 #define BSP_USART_RX_PORT             CW_GPIOC
 #define BSP_USART_RX_AF()             PC14_AFx_UART1RXD()
 #define BSP_USART_RX_CLK_ENABLE()     __SYSCTRL_GPIOC_CLK_ENABLE()
+
+/* 1=硬件交换 TX/RX 引脚功能 (线接反时用) */
+#define BSP_USART_PIN_SWAP            1U
 
 /**
  * @brief  初始化调试串口 (默认 8N1, 收发使能)

@@ -22,6 +22,8 @@ extern "C"
 #include "BSP_halltim.h"
 #include "BSP_usart.h"
 #include "BSP_motor.h"
+#include "BSP_key.h"
+#include "BSP_adc.h"
 
 #ifdef __cplusplus
 }

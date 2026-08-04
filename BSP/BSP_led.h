@@ -1,6 +1,6 @@
 /**
  * @file    BSP_led.h
- * @brief   LED 驱动 (PC13 推挽输出, 高电平点亮)
+ * @brief   LED 驱动 (PB09 推挽输出, 高电平点亮)
  */
 #ifndef BSP_LED_H
 #define BSP_LED_H
@@ -12,17 +12,17 @@
 extern "C" {
 #endif
 
-/* LED: PC13 推挽输出; 高电平点亮 */
-#define BSP_LED1_PIN                  GPIO_PIN_13
-#define BSP_LED1_PORT                 CW_GPIOC
-#define BSP_LED1_CLK_ENABLE()         __SYSCTRL_GPIOC_CLK_ENABLE()
-#define BSP_LED1_AF()                 PC13_AFx_GPIO()
-#define BSP_LED1_ON()                 PC13_SETHIGH()
-#define BSP_LED1_OFF()                PC13_SETLOW()
-#define BSP_LED1_TOG()                PC13_TOG()
+/* LED: PB09 推挽输出; 高电平点亮 (与板载 LED1 一致) */
+#define BSP_LED1_PIN                  GPIO_PIN_9
+#define BSP_LED1_PORT                 CW_GPIOB
+#define BSP_LED1_CLK_ENABLE()         __SYSCTRL_GPIOB_CLK_ENABLE()
+#define BSP_LED1_AF()                 PB09_AFx_GPIO()
+#define BSP_LED1_ON()                 PB09_SETHIGH()
+#define BSP_LED1_OFF()                PB09_SETLOW()
+#define BSP_LED1_TOG()                PB09_TOG()
 
 /**
- * @brief  初始化 LED (PC13 推挽输出, 默认熄灭)
+ * @brief  初始化 LED (PB09 推挽输出, 默认熄灭)
  */
 void BSP_LED_Init(void);
 

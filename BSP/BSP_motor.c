@@ -71,66 +71,41 @@ static void MOTOR_SetOcMode(uint8_t ch, uint32_t oc_mode)
     }
 }
 
+/* 原子写单相 CCxE/CCxNE, 避免位域 RMW 中间态 */
+static void MOTOR_SetCcer(uint8_t ch, uint8_t en, uint8_t nen)
+{
+    uint32_t ccer = CW_ATIM->CCER;
+    uint32_t shift = (uint32_t)ch * 4U;
+    ccer &= ~((1UL << shift) | (1UL << (shift + 2U)));
+    if (en != 0U)
+    {
+        ccer |= (1UL << shift);
+    }
+    if (nen != 0U)
+    {
+        ccer |= (1UL << (shift + 2U));
+    }
+    CW_ATIM->CCER = ccer;
+}
+
 static void MOTOR_SetPhase(uint8_t ch, uint8_t mode)
 {
     switch (mode)
     {
         case PHASE_PWM:
-            /* 上桥 PWM + 下桥互补 PWM (死区) */
             MOTOR_SetOcMode(ch, ATIM_OCMODE_PWM1);
-            if (ch == 0U)
-            {
-                CW_ATIM->CCER_f.CC1E  = 1U;
-                CW_ATIM->CCER_f.CC1NE = 1U;
-            }
-            else if (ch == 1U)
-            {
-                CW_ATIM->CCER_f.CC2E  = 1U;
-                CW_ATIM->CCER_f.CC2NE = 1U;
-            }
-            else
-            {
-                CW_ATIM->CCER_f.CC3E  = 1U;
-                CW_ATIM->CCER_f.CC3NE = 1U;
-            }
+            MOTOR_SetCcer(ch, 1U, 1U);
             break;
 
         case PHASE_LOW:
-            /* OCxREF=0 → 互补下桥为高, 仅开 CHN */
+            /* SWD 实测: 仅 CCxNE=1 时 PB13/14/15 仍为低, 下桥不开
+             * 必须 CCxE+CCxNE 同时开 + FORCED_INACTIVE → CHN 才为高 */
             MOTOR_SetOcMode(ch, ATIM_OCMODE_FORCED_INACTIVE);
-            if (ch == 0U)
-            {
-                CW_ATIM->CCER_f.CC1E  = 0U;
-                CW_ATIM->CCER_f.CC1NE = 1U;
-            }
-            else if (ch == 1U)
-            {
-                CW_ATIM->CCER_f.CC2E  = 0U;
-                CW_ATIM->CCER_f.CC2NE = 1U;
-            }
-            else
-            {
-                CW_ATIM->CCER_f.CC3E  = 0U;
-                CW_ATIM->CCER_f.CC3NE = 1U;
-            }
+            MOTOR_SetCcer(ch, 1U, 1U);
             break;
 
-        default: /* PHASE_FLOAT */
-            if (ch == 0U)
-            {
-                CW_ATIM->CCER_f.CC1E  = 0U;
-                CW_ATIM->CCER_f.CC1NE = 0U;
-            }
-            else if (ch == 1U)
-            {
-                CW_ATIM->CCER_f.CC2E  = 0U;
-                CW_ATIM->CCER_f.CC2NE = 0U;
-            }
-            else
-            {
-                CW_ATIM->CCER_f.CC3E  = 0U;
-                CW_ATIM->CCER_f.CC3NE = 0U;
-            }
+        default:
+            MOTOR_SetCcer(ch, 0U, 0U);
             break;
     }
 }
@@ -189,9 +164,13 @@ void BSP_MOTOR_Init(uint32_t pclk_hz)
                         (int16_t)BSP_MOTOR_PWM_DEADTIME,
                         DISABLE);
 
-    /* 运行/空闲时关闭态为无效电平 */
+    /* OSSR=1 运行关断无效; OSSI=0 禁用通道真正 Hi-Z (浮空相)
+     * 明确关闭刹车, 避免未接 BKIN 误关断 */
     CW_ATIM->BDTR_f.OSSR = 1U;
-    CW_ATIM->BDTR_f.OSSI = 1U;
+    CW_ATIM->BDTR_f.OSSI = 0U;
+    CW_ATIM->BDTR_f.BKE  = 0U;
+    CW_ATIM->BDTR_f.BK2E = 0U;
+    CW_ATIM->AF1_f.BKINE = 0U;
 
     ATIM_Cmd(ENABLE);
     ATIM_CtrlPWMOutputs(DISABLE); /* Start 时再开 MOE */
@@ -201,9 +180,10 @@ void BSP_MOTOR_Init(uint32_t pclk_hz)
 
 void BSP_MOTOR_SetDuty(uint16_t duty)
 {
-    if (duty > BSP_MOTOR_PWM_ARR)
+    /* CCR==ARR 时中央对齐 PWM1 近似常通, 看起来像“全开且不换相” */
+    if (duty >= BSP_MOTOR_PWM_ARR)
     {
-        duty = BSP_MOTOR_PWM_ARR;
+        duty = (uint16_t)(BSP_MOTOR_PWM_ARR - 1U);
     }
     s_duty = duty;
     ATIM_SetCompare1(duty);
@@ -221,6 +201,7 @@ void BSP_MOTOR_Commutate(uint8_t hall)
     uint8_t pwm_ch;
     uint8_t low_ch;
     uint8_t i;
+    uint32_t ccer;
 
     hall &= 0x07U;
     if ((hall == 0U) || (hall == 7U))
@@ -232,24 +213,31 @@ void BSP_MOTOR_Commutate(uint8_t hall)
     pwm_ch = s_step_table[hall][0];
     low_ch = s_step_table[hall][1];
 
-    /* 先全部浮空再开通, 避免换相直通 */
-    MOTOR_AllFloat();
-
+    /* 先改 OC 模式, 再一次写 CCER (无浮空空白, 高速少失步) */
     for (i = 0U; i < 3U; i++)
     {
         if (i == pwm_ch)
         {
-            MOTOR_SetPhase(i, PHASE_PWM);
+            MOTOR_SetOcMode(i, ATIM_OCMODE_PWM1);
         }
         else if (i == low_ch)
         {
-            MOTOR_SetPhase(i, PHASE_LOW);
-        }
-        else
-        {
-            MOTOR_SetPhase(i, PHASE_FLOAT);
+            MOTOR_SetOcMode(i, ATIM_OCMODE_FORCED_INACTIVE);
         }
     }
+
+    ccer = CW_ATIM->CCER;
+    ccer &= ~0x777UL;
+    for (i = 0U; i < 3U; i++)
+    {
+        uint32_t shift = (uint32_t)i * 4U;
+        if ((i == pwm_ch) || (i == low_ch))
+        {
+            /* PWM 与 LOW 均 E+NE (LOW 用 forced inactive 时 CHN 才拉高) */
+            ccer |= (1UL << shift) | (1UL << (shift + 2U));
+        }
+    }
+    CW_ATIM->CCER = ccer;
 }
 
 void BSP_MOTOR_Start(uint8_t hall)
@@ -265,4 +253,9 @@ void BSP_MOTOR_Stop(void)
     MOTOR_AllFloat();
     ATIM_CtrlPWMOutputs(DISABLE);
     s_running = 0U;
+}
+
+uint8_t BSP_MOTOR_IsRunning(void)
+{
+    return s_running;
 }

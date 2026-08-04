@@ -54,6 +54,11 @@ void BSP_MOTOR_SetDuty(uint16_t duty);
  */
 uint16_t BSP_MOTOR_GetDuty(void);
 
+/**
+ * @brief  电机是否在输出 (MOE 已开)
+ */
+uint8_t BSP_MOTOR_IsRunning(void);
+
 #ifdef __cplusplus
 }
 #endif

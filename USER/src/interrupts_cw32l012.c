@@ -319,7 +319,7 @@ void LPTIM_IRQHandler(void)
 void BTIM1_IRQHandler(void)
 {
     /* USER CODE BEGIN */
-
+    BSP_KEY_TimerIRQHandler();
     /* USER CODE END */
 }
 
