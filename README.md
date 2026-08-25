@@ -27,6 +27,7 @@
 | **采样** | PWM **峰值**（下桥全开）采 PA00/01/02 三电阻 |
 | **PWM** | ATIM 中央对齐三相互补，20 kHz，死区约 2 µs |
 | **启停** | PC13；LED PB09 |
+| **VOFA+** | 串口 JustFloat，10 ms 一帧：Id/Iq/θ/HFI/状态 |
 
 霍尔只观测，不参与控制。
 
@@ -61,13 +62,15 @@ python flash_cw32.py build/Debug/cw32l012_hall_bldc.elf
 2. **PC13** 启动：`ALIGN` → `IF` → `RUN`。
 3. **PA07** 在 `RUN` 后调 Iq（转矩/转速）。
 4. 过流会 `FAULT`，再按键重试。
-5. 串口：
+5. 串口接 **VOFA+**（115200，协议选 **JustFloat**），通道：
 
-```
-DBG st=RUN th=80 hall=5 id=12 iq=260 iqref=280 dem=8 w=35
-```
+| CH | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|----|---|---|---|---|---|---|---|---|
+| 量 | id | iq | iqref | θ° | dem | w | state | hall |
 
-`th` 为电角度高 8 位（0–255≈0–360°），`dem` 为 HFI 解调，`w` 为 PLL 角速度。
+`state`：0=IDLE，1=ALIGN，2=IF，3=RUN，4=FAULT。上电后即使没按键也会出波形，用来确认连上了。
+
+若要改回文本 `DBG st=...`，把 `USER/src/main.c` 里的 `APP_VOFA_ENABLE` 设成 `0`。
 
 ---
 

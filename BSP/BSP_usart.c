@@ -62,6 +62,32 @@ void BSP_USART_SendByte(uint8_t ch)
     BSP_USART->TDR = ch;
 }
 
+void BSP_USART_SendBuf(const uint8_t *buf, uint32_t len)
+{
+    uint32_t i;
+
+    if (buf == NULL)
+    {
+        return;
+    }
+    for (i = 0U; i < len; i++)
+    {
+        BSP_USART_SendByte(buf[i]);
+    }
+}
+
+void BSP_USART_SendJustFloat(const float *data, uint32_t ch_count)
+{
+    static const uint8_t tail[4] = {0x00U, 0x00U, 0x80U, 0x7FU};
+
+    if ((data == NULL) || (ch_count == 0U))
+    {
+        return;
+    }
+    BSP_USART_SendBuf((const uint8_t *)data, ch_count * (uint32_t)sizeof(float));
+    BSP_USART_SendBuf(tail, 4U);
+}
+
 void BSP_USART_SendString(const char *str)
 {
     if (str == NULL)
