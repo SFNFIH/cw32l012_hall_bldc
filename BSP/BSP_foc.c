@@ -4,12 +4,14 @@
  *
  * 峰值中断采样三相 INA180 (下桥全开窗). INA180 单向, I = offset - adc.
  * sin/cos 用片上 CORDIC (q1.15, 与 ADC 并行).
+ * 电压圆限制用 EAU 硬件 sqrt + 有符号除法 (不占用 CORDIC).
  * HFI 电压加在 Id PI 之后, 避免电流环把注入打掉.
  */
 #include "BSP_foc.h"
 #include "BSP_motor.h"
 #include "BSP_adc.h"
 #include "cw32l012_cordic.h"
+#include "cw32l012_eau.h"
 
 #define Q15_MUL(a, b)       ((int16_t)(((int32_t)(a) * (int32_t)(b)) >> 15))
 #define SQRT3_2             28378   /* 0.866025 * 32768 */
@@ -28,6 +30,7 @@
 #define HFI_KP              6
 #define HFI_KI              1
 #define CORDIC_BUSY_TO      64U
+#define EAU_BUSY_TO         96U      /* div 最坏 35 HCLK, sqrt 17 HCLK */
 
 typedef struct
 {
@@ -100,6 +103,48 @@ static void CordicReadSinCos(int16_t *cs, int16_t *sn)
 
     *cs = (int16_t)CW_CORDIC->X;
     *sn = (int16_t)CW_CORDIC->Y;
+}
+
+static int EauWait(void)
+{
+    uint32_t to = EAU_BUSY_TO;
+
+    while ((CW_EAU->CSR_f.BUSY != 0U) && (to > 0U))
+    {
+        to--;
+    }
+    return (to != 0U) ? 1 : 0;
+}
+
+/* 开方: MODE=2, 写 DIVIDEND 即启动; 不用 EAU_StartOperation (它会再写 DIVISOR) */
+static int EauSqrtU32(uint32_t a, uint32_t *out)
+{
+    CW_EAU->CSR = (uint32_t)EAU_MODE_SQRT;
+    CW_EAU->DIVIDEND = a;
+    if (EauWait() == 0)
+    {
+        return 0;
+    }
+    *out = CW_EAU->QUOTIENT;
+    return 1;
+}
+
+/* 有符号除法: 手册 11.5 写 DIVIDEND 再写 DIVISOR 启动 */
+static int EauDivS32(int32_t a, int32_t b, int32_t *out)
+{
+    CW_EAU->CSR = (uint32_t)EAU_MODE_SIGNED_DIV;
+    CW_EAU->DIVIDEND = (uint32_t)a;
+    CW_EAU->DIVISOR = (uint32_t)b;
+    if (EauWait() == 0)
+    {
+        return 0;
+    }
+    if ((CW_EAU->CSR_f.ZERO != 0U) || (CW_EAU->CSR_f.OVR != 0U))
+    {
+        return 0;
+    }
+    *out = (int32_t)CW_EAU->QUOTIENT;
+    return 1;
 }
 
 static int16_t Clamp16(int32_t v, int16_t lim)
@@ -196,12 +241,31 @@ static void VoltLimit(int16_t *ud, int16_t *uq)
 {
     int32_t m2 = (int32_t)(*ud) * (*ud) + (int32_t)(*uq) * (*uq);
     int32_t lim2 = (int32_t)V_LIM * V_LIM;
-    if (m2 > lim2)
+    uint32_t mag;
+    int32_t udn;
+    int32_t uqn;
+
+    if (m2 <= lim2)
     {
-        /* 粗略缩放, 避免 sqrt */
-        *ud = (int16_t)(((int32_t)(*ud) * V_LIM) / 26000);
-        *uq = (int16_t)(((int32_t)(*uq) * V_LIM) / 26000);
+        return;
     }
+
+    /* |u| = sqrt(ud^2+uq^2), 再按 V_LIM/|u| 缩到圆内. 超时则保持原值. */
+    if (EauSqrtU32((uint32_t)m2, &mag) == 0)
+    {
+        return;
+    }
+    if (mag <= (uint32_t)V_LIM)
+    {
+        return;
+    }
+    if ((EauDivS32((int32_t)(*ud) * V_LIM, (int32_t)mag, &udn) == 0) ||
+        (EauDivS32((int32_t)(*uq) * V_LIM, (int32_t)mag, &uqn) == 0))
+    {
+        return;
+    }
+    *ud = Clamp16(udn, V_LIM);
+    *uq = Clamp16(uqn, V_LIM);
 }
 
 static void EnterFault(void)
@@ -217,6 +281,7 @@ void BSP_FOC_Init(void)
     s_iq_cmd = 0;
     s_tick = 0U;
     CordicInit();
+    EAU_Init();
 }
 
 void BSP_FOC_Start(uint16_t iq_cmd)

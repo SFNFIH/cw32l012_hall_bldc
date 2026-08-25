@@ -21,6 +21,7 @@
 | **RUN** | θ 改由 PLL；电位器给定 **Iq** |
 | **HFI** | 每个 FOC 周期翻转 d 轴注入电压；`sign·Iq` 低通后作位置误差 |
 | **CORDIC** | 片上硬件算 sin/cos（q1.15，与 ADC 并行）；Park / 反 Park 共用一次结果 |
+| **EAU** | 片上硬件 32 位开方 / 有符号除法，做 Ud/Uq 电压圆限制 |
 | **采样** | PWM **峰值**（下桥全开）采 PA00/01/02 三电阻 |
 | **PWM** | ATIM 中央对齐三相互补，20 kHz，死区约 2 µs |
 | **启停** | PC13；LED PB09 |
@@ -70,8 +71,9 @@ DBG st=RUN th=80 hall=5 id=12 iq=260 iqref=280 dem=8 w=35
 
 ## 注意
 
-- MCU 仅 **8 MHz Cortex-M0+**。Park 用 CORDIC（16 次迭代 ≈ 18 HCLK），电流 PI / `HFI_V` 在 `BSP_foc.c` 微调。
+- MCU 仅 **8 MHz Cortex-M0+**。Park 用 CORDIC（16 次迭代 ≈ 18 HCLK），电压圆限制用 EAU（sqrt 17 HCLK，除法 2–35 HCLK）。电流 PI / `HFI_V` 在 `BSP_foc.c` 微调。
 - CORDIC 角度单位为 π：FOC 的 16 位 θ 按有符号 q1.15 写入 Z（[π,2π) 折到 [-π,0)）。
+- EAU 只在 PWM 峰值 ISR 的 `VoltLimit` 里用，避免和主循环抢同一外设。SVM / PI 的移位缩放比硬件除法更便宜，不替换。
 - 板载 **INA180 单向**，负电流会削顶，FOC 精度受此限制。
 - 表贴磁钢凸极弱时 PLL 可能锁不稳，电机会停在 I-F 开环角；可加大 `HFI_V` 或加长 `IF_TICKS`。
 - 下桥必须互补 PWM；峰值采样对应 PWM1 的关断中心。
