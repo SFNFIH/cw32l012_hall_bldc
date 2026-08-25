@@ -72,6 +72,11 @@ void BSP_MOTOR_SetDuty(uint16_t duty);
 uint16_t BSP_MOTOR_GetDuty(void);
 
 /**
+ * @brief  三相浮空 (识别脉冲间隔)
+ */
+void BSP_MOTOR_FloatAll(void);
+
+/**
  * @brief  电机是否在输出 (MOE 已开)
  */
 uint8_t BSP_MOTOR_IsRunning(void);

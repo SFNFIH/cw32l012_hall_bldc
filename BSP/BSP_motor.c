@@ -197,6 +197,11 @@ uint16_t BSP_MOTOR_GetDuty(void)
     return s_duty;
 }
 
+void BSP_MOTOR_FloatAll(void)
+{
+    MOTOR_AllFloat();
+}
+
 void BSP_MOTOR_Commutate(uint8_t hall)
 {
     uint8_t pwm_ch;

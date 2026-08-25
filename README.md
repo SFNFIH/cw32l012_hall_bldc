@@ -1,6 +1,6 @@
-# CW32L012 无感六步 BLDC 驱动
+# CW32L012 高频注入无感六步 BLDC
 
-基于 **CW32L012** 的无感 BLDC 六步换相：三相桥臂反电势过零 + ATIM 三相互补 PWM，按键启停、电位器调速。
+基于 **CW32L012** 的无感 BLDC：在六步互补 PWM 上叠加 **10 kHz 方波注入**，用下桥分流电流的 `|ΔI|` 观测凸极/饱和，静止辨识扇区后换相。
 
 [![MCU](https://img.shields.io/badge/MCU-CW32L012x8-blue)](https://www.whxy.com)
 [![Toolchain](https://img.shields.io/badge/Toolchain-GCC%20ARM-green)](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain)
@@ -8,21 +8,24 @@
 
 仓库：https://github.com/SFNFIH/cw32l012_hall_bldc
 
+本分支相对反电势过零分支：位置来自 **高频电流响应**，不依赖反电势幅值，低速可用。
+
 ---
 
 ## 功能说明
 
 | 模块 | 说明 |
 |------|------|
-| **启动** | 对齐（固定一步约 200 ms）→ 开环强拖升频 → 反电势过零切入闭环 |
-| **换相** | ATIM 20 kHz 中断采样浮空相反电势；过零后再延时约 30° 换相 |
-| **PWM** | ATIM 中央对齐互补 PWM，约 20 kHz（PCLK=8 MHz，ARR=199） |
-| **下桥** | 导通下桥相：`CCxE+CCxNE` + `FORCED_INACTIVE` |
-| **调速** | PA07 ADC 电位器 → 占空比（下限 36，上限 170；开环起步约 50） |
-| **启停** | PC13 按键切换运行；LED(PB09) 指示运行状态 |
-| **调试串口** | UART1 @ 115200（PC14/PC15，`CR2.SWAP`） |
+| **IDENT** | 六个电压矢量各注入约 1.2 ms 直流脉冲，比较三相 INA180 电流；最大电流方向 ≈ d 轴（饱和） |
+| **注入** | 占空比每 PWM 周期翻转 `±12`（相对 ARR=199），等效 **10 kHz** 方波 |
+| **观测** | 采样当前步 **下桥常开相** 分流；`|I[k]-I[k-1]|` 低通后与 `1/L` 成正比 |
+| **换相** | 扇区内 `|ΔI|` 相对进入值上升（L 下降、转子靠近该矢量 d 轴）则进入下一步 |
+| **启动** | IDENT → 开环斜坡（同时注入）→ 凸极信号稳定后 `RUN` |
+| **PWM** | ATIM 中央对齐互补，约 20 kHz |
+| **调速** | PA07 电位器（下限 40，上限 170） |
+| **启停** | PC13；LED(PB09) |
 
-霍尔接口仍初始化，仅作对比观测（`hall=`），**不参与换相**。
+霍尔只观测、不换相。
 
 ### 引脚
 
@@ -30,124 +33,54 @@
 |------|------|------|
 | 电机 U/V/W 上桥 | PA08 / PA09 / PA10 | ATIM CH1/2/3 |
 | 电机 U/V/W 下桥 | PB13 / PB14 / PB15 | ATIM CH1N/2N/3N |
-| 反电势 U/V/W | PA03 / PA04 / PA05 | ADC1 IN3/4/5，相电压 10k/1k 分压 + 470 pF |
-| 母线 V12 | PA06 | ADC1 IN6，3.3k/1k 分压，用于过零中点 |
+| 相电流 U/V/W | PA00 / PA01 / PA02 | ADC1 IN0/1/2，INA180 + 下桥分流 |
+| 反电势 U/V/W | PA03 / PA04 / PA05 | 本分支不用于换相 |
 | 调速电位器 | PA07 | ADC1 IN7 |
-| 启停按键 | PC13 | 按下=高，内部下拉 |
+| 启停按键 | PC13 | 按下=高 |
 | 运行指示灯 | PB09 | 高电平点亮 |
-| 调试 UART | PC14 / PC15 | 经 DAPLink VCP（常用 COM5） |
+| 调试 UART | PC14 / PC15 | 115200 |
 
-PCB 桥臂与 MCU 通道对应：PA08→HIN3→`OUT_W`，PA09→HIN2→`OUT_V`，PA10→HIN1→`OUT_U`。浮空相采样按此映射。
-
-### 六步表（与有感正向表相同）
-
-正向序列：`001 → 011 → 010 → 110 → 100 → 101 → 001`  
-每步两相导通（一相互补 PWM，一相下桥常开），第三相浮空并检测反电势过零。
-
----
-
-## 项目结构
-
-```
-.
-├── BSP/                 # 板级驱动
-│   ├── BSP_motor.*      # ATIM 六步换相 / 互补 PWM
-│   ├── BSP_bemf.*       # 反电势过零无感状态机
-│   ├── BSP_halltim.*    # 霍尔接口（观测，不换相）
-│   ├── BSP_adc.*        # 反电势 / 母线 / 调速
-│   ├── BSP_key.*        # PC13 + BTIM1 扫描
-│   ├── BSP_led.*        # PB09
-│   └── BSP_usart.*      # UART1 调试口
-├── USER/
-│   ├── inc/             # main.h, interrupts
-│   └── src/             # main, 中断, 时钟 override
-├── Libraries/           # CW32L012 标准外设库
-├── Board/               # 板级定义
-├── cmake/               # gcc-arm-none-eabi 工具链
-├── Doc/原理图.net      # 网表（分压与相节点）
-├── flash_cw32.py        # pyOCD 烧录
-├── capture_uart.py      # 串口抓取调试行
-├── CMakeLists.txt
-└── ...
-```
+固件相 CH1/2/3 = PA08/09/10 = PCB `OUT_W/V/U`，电流通道按此映射。
 
 ---
 
 ## 构建与烧录
 
-### 前置条件
-
-- `arm-none-eabi-gcc`
-- CMake ≥ 3.22、Ninja
-- pyOCD（推荐）或 OpenOCD；CMSIS-DAP / DAPLink
-
-### 构建
-
 ```bash
 cmake --preset Debug
 cmake --build build/Debug
-```
-
-产物在 `build/Debug/`：
-
-| 文件 | 用途 |
-|------|------|
-| `cw32l012_hall_bldc.elf` | 调试 |
-| `cw32l012_hall_bldc.hex` / `.bin` | 烧录 |
-
-### 烧录
-
-```bash
-# 推荐：指定 ELF
 python flash_cw32.py build/Debug/cw32l012_hall_bldc.elf
-
-# 或 OpenOCD 目标（需本机已配置 OPENOCD 路径）
-cmake --build build/Debug -t flash
 ```
-
-烧录时请关闭占用 DAPLink 串口的程序，避免 SWD 抢占失败。
 
 ---
 
 ## 使用方法
 
-1. 接线：三相桥臂、反电势分压（板载）、电位器与按键。霍尔可悬空。
-2. 烧录后复位；上电默认 **停机**。
-3. **PC13** 按一下启动（LED 亮）：先对齐，再开环加速，过零稳定后进入 `RUN`。
-4. **PA07** 在闭环后调节转速；建议中速起步。
-5. 过零长期丢失会进入 `FAULT`（电机关断），再按键重试。
-6. 串口 115200 查看：
+1. 接好三相桥臂与分流（板载 INA180）。霍尔可悬空。
+2. 复位后停机；**PC13** 启动：先 ident（电机可能微动），再斜坡，最后 `RUN`。
+3. 闭环后用 **PA07** 调速。
+4. 凸极信号长期对不上会 `FAULT`，再按键重试。
+5. 串口：
 
 ```
-DBG st=RUN step=3 hall=4 bemf=512 mid=677 duty=50 zc=120 miss=0 dt=40
+DBG st=RUN step=2 hall=2 ident=4 amp=28 i=610 duty=52 lock=40 miss=0 dt=88
 ```
 
-```bash
-python capture_uart.py COM5 115200 20
-```
+`amp` 为高频电流差幅值；`ident` 为静止辨识到的 d 轴步号。
 
 ---
 
-## 关键参数
+## 关键参数（`BSP_hfi.c`）
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| HCLK / PCLK | 8 MHz | HSI / 12，PCLK 不分频 |
-| PWM | ≈ 20 kHz | 中央对齐，ARR=199，死区 ≈ 2 µs |
-| 反电势分压 | 1/11 | 10 kΩ / 1 kΩ，470 pF 到地 |
-| 母线分压 | ≈ 1/4.3 | 3.3 kΩ / 1 kΩ，过零中点 = Vbus/2 |
-| 开环斜坡 | 40 ms → 4 ms/步 | 对齐 200 ms 后强拖 |
-| 占空比 | 36 ~ 170 | 相对 ARR；无感下限略高于有感 |
-| UART | 115200 8N1 | 调试打印 |
+| PWM | 20 kHz | 中央对齐，ARR=199 |
+| 注入 | ±12 duty | 每周期翻转 → 10 kHz |
+| IDENT | 48 duty × 1.2 ms × 6 步 | 步间浮空 0.5 ms |
+| 斜坡 | 35 ms → 4.5 ms/步 | 与注入同时进行 |
+| 占空比 | 40 ~ 170 | 需留出 ±12 注入余量 |
 
----
-
-## 注意事项
-
-- CW32L012 为 **Cortex-M0+**，`InitTick()` 直接配置 SysTick，不写不可用的 `SCB->SHP`。
-- 下桥必须 **双使能 + Forced Inactive**，仅 `CCxNE=1` 时 CHN 可能一直为低。
-- 过零极性与浮空相映射在 `BSP_bemf.c` 的 `s_float_ph` / `s_zc_rise` / `s_bemf_ch`。若无力矩或反转，先核对接线再改这两张表。
-- 低速反电势弱，闭环转速不宜过低；堵转或失步会 `FAULT`。
+表贴磁钢凸极弱时，IDENT 可能不准，斜坡仍会强拖；可加大 `HFI_AMP` 或 `HFI_IDENT_DUTY`。
 
 ---
 

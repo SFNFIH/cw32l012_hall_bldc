@@ -250,7 +250,7 @@ void ADC1_IRQHandler(void)
 void ATIM_IRQHandler(void)
 {
     /* USER CODE BEGIN */
-    BSP_BEMF_PwmIrqHandler();
+    BSP_HFI_PwmIrqHandler();
     /* USER CODE END */
 }
 

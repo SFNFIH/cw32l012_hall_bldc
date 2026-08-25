@@ -16,12 +16,13 @@ void BSP_ADC_Init(void)
 
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.IT   = GPIO_IT_NONE;
-    GPIO_InitStruct.Pins = BSP_ADC_BEMF_U_PIN | BSP_ADC_BEMF_V_PIN |
+    GPIO_InitStruct.Pins = BSP_ADC_IU_PIN | BSP_ADC_IV_PIN | BSP_ADC_IW_PIN |
+                           BSP_ADC_BEMF_U_PIN | BSP_ADC_BEMF_V_PIN |
                            BSP_ADC_BEMF_W_PIN | BSP_ADC_VBUS_PIN |
                            BSP_ADC_DUTY_PIN;
     GPIO_Init(BSP_ADC_PORT, &GPIO_InitStruct);
 
-    ch_fast.ADC_InputChannel = BSP_ADC_BEMF_U_CH;
+    ch_fast.ADC_InputChannel = BSP_ADC_IU_CH;
     ch_fast.ADC_SampTime     = ADC_SampTime6Clk;
     ch_slow.ADC_InputChannel = BSP_ADC_DUTY_CH;
     ch_slow.ADC_SampTime     = ADC_SampTime12Clk;

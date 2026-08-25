@@ -1,13 +1,13 @@
 /**
  * @file    main.c
- * @brief   反电势无感六步 + ADC 调速 + 按键启停
+ * @brief   高频注入无感六步 + ADC 调速 + 按键启停
  */
 #include "../inc/main.h"
 
 #define APP_HCLK_HZ     8000000U
 #define APP_PCLK_HZ     APP_HCLK_HZ
 #define APP_UART_BAUD   115200U
-#define DUTY_MIN        36U
+#define DUTY_MIN        40U
 #define DUTY_MAX_CAP    170U
 
 #define DBG_MBOX_MAGIC  0x49B1DB60UL
@@ -18,11 +18,12 @@ typedef struct
     uint8_t  state;
     uint16_t duty;
     uint16_t adc;
-    uint16_t bemf;
-    uint16_t mid;
+    uint16_t amp;
+    uint16_t i_raw;
     uint8_t  step;
     uint8_t  hall;
-    uint16_t zc;
+    uint8_t  ident;
+    uint16_t lock;
     uint16_t miss;
     uint16_t period;
     uint8_t  moe;
@@ -32,21 +33,21 @@ typedef struct
 volatile DebugMbox_t g_dbg_mbox;
 static uint32_t s_dbg_stamp = 0U;
 
-static const char *BemfStateName(BemfState_t st)
+static const char *HfiStateName(HfiState_t st)
 {
     switch (st)
     {
-        case BEMF_ST_ALIGN: return "ALIGN";
-        case BEMF_ST_RAMP:  return "RAMP";
-        case BEMF_ST_RUN:   return "RUN";
-        case BEMF_ST_FAULT: return "FAULT";
-        default:            return "IDLE";
+        case HFI_ST_IDENT: return "IDENT";
+        case HFI_ST_RAMP:  return "RAMP";
+        case HFI_ST_RUN:   return "RUN";
+        case HFI_ST_FAULT: return "FAULT";
+        default:           return "IDLE";
     }
 }
 
 static void DBG_UpdateMbox(uint8_t motor_on, uint16_t duty, uint16_t adc)
 {
-    BemfState_t st = BSP_BEMF_GetState();
+    HfiState_t st = BSP_HFI_GetState();
 
     s_dbg_stamp++;
     g_dbg_mbox.magic    = DBG_MBOX_MAGIC;
@@ -54,24 +55,26 @@ static void DBG_UpdateMbox(uint8_t motor_on, uint16_t duty, uint16_t adc)
     g_dbg_mbox.state    = (uint8_t)st;
     g_dbg_mbox.duty     = duty;
     g_dbg_mbox.adc      = adc;
-    g_dbg_mbox.bemf     = BSP_BEMF_GetBemf();
-    g_dbg_mbox.mid      = BSP_BEMF_GetMid();
-    g_dbg_mbox.step     = BSP_BEMF_GetStep();
+    g_dbg_mbox.amp      = BSP_HFI_GetAmp();
+    g_dbg_mbox.i_raw    = BSP_HFI_GetCurrent();
+    g_dbg_mbox.step     = BSP_HFI_GetStep();
     g_dbg_mbox.hall     = g_hall_state;
-    g_dbg_mbox.zc       = BSP_BEMF_GetZcCnt();
-    g_dbg_mbox.miss     = BSP_BEMF_GetMissCnt();
-    g_dbg_mbox.period   = BSP_BEMF_GetPeriod();
+    g_dbg_mbox.ident    = BSP_HFI_GetIdentStep();
+    g_dbg_mbox.lock     = BSP_HFI_GetLockCnt();
+    g_dbg_mbox.miss     = BSP_HFI_GetMissCnt();
+    g_dbg_mbox.period   = BSP_HFI_GetPeriod();
     g_dbg_mbox.moe      = (uint8_t)CW_ATIM->BDTR_f.MOE;
     g_dbg_mbox.stamp    = s_dbg_stamp;
 
-    printf("DBG st=%s step=%u hall=%u bemf=%u mid=%u duty=%u zc=%u miss=%u dt=%u\r\n",
-           BemfStateName(st),
+    printf("DBG st=%s step=%u hall=%u ident=%u amp=%u i=%u duty=%u lock=%u miss=%u dt=%u\r\n",
+           HfiStateName(st),
            (unsigned int)g_dbg_mbox.step,
            (unsigned int)g_dbg_mbox.hall,
-           (unsigned int)g_dbg_mbox.bemf,
-           (unsigned int)g_dbg_mbox.mid,
+           (unsigned int)g_dbg_mbox.ident,
+           (unsigned int)g_dbg_mbox.amp,
+           (unsigned int)g_dbg_mbox.i_raw,
            (unsigned int)duty,
-           (unsigned int)g_dbg_mbox.zc,
+           (unsigned int)g_dbg_mbox.lock,
            (unsigned int)g_dbg_mbox.miss,
            (unsigned int)g_dbg_mbox.period);
 }
@@ -113,20 +116,20 @@ static void Motor_SetEnable(uint8_t on, uint16_t duty, uint16_t adc)
 {
     if (on != 0U)
     {
-        BSP_BEMF_SetVbus(BSP_ADC_ReadVbus());
-        BSP_BEMF_Start(duty);
+        BSP_HFI_Start(duty);
         BSP_LED_On();
-        printf("MOTOR ON duty=%u (sensorless BEMF)\r\n", (unsigned int)duty);
+        printf("MOTOR ON duty=%u (HFI square-wave)\r\n", (unsigned int)duty);
     }
     else
     {
-        BSP_BEMF_Stop();
+        BSP_HFI_Stop();
         BSP_LED_Off();
-        printf("MOTOR OFF st=%s zc=%u miss=%u dt=%u\r\n",
-               BemfStateName(BSP_BEMF_GetState()),
-               (unsigned int)BSP_BEMF_GetZcCnt(),
-               (unsigned int)BSP_BEMF_GetMissCnt(),
-               (unsigned int)BSP_BEMF_GetPeriod());
+        printf("MOTOR OFF st=%s ident=%u lock=%u miss=%u dt=%u\r\n",
+               HfiStateName(BSP_HFI_GetState()),
+               (unsigned int)BSP_HFI_GetIdentStep(),
+               (unsigned int)BSP_HFI_GetLockCnt(),
+               (unsigned int)BSP_HFI_GetMissCnt(),
+               (unsigned int)BSP_HFI_GetPeriod());
     }
     DBG_UpdateMbox(on, duty, adc);
 }
@@ -137,7 +140,6 @@ int main(void)
     uint16_t adc;
     uint16_t duty;
     uint16_t duty_last = 0xFFFFU;
-    uint16_t vbus;
     KeyEvent_t key_ev;
     static uint32_t s_dbg_div = 0U;
     static uint8_t s_st_last = 0xFFU;
@@ -153,58 +155,45 @@ int main(void)
     BSP_ADC_Init();
     BSP_MOTOR_Init(APP_PCLK_HZ);
     BSP_MOTOR_EnablePwmIrq();
-    BSP_BEMF_Init();
+    BSP_HFI_Init();
 
     NVIC_DisableIRQ(ATIM_IRQn);
     BSP_ADC_Convert(&adc);
-    vbus = BSP_ADC_ReadVbus();
     NVIC_EnableIRQ(ATIM_IRQn);
 
     duty = AdcToDuty(adc);
     duty_last = duty;
     BSP_MOTOR_SetDuty(duty);
-    BSP_BEMF_SetVbus(vbus);
     Motor_SetEnable(0U, duty, adc);
 
-    printf("BEMF sensorless | KEY=toggle | vbus=%u mid=%u duty_cap=%u\r\n",
-           (unsigned int)vbus,
-           (unsigned int)BSP_BEMF_GetMid(),
+    printf("HFI sensorless | KEY=toggle | duty_cap=%u hf=+/-12\r\n",
            (unsigned int)DUTY_MAX_CAP);
 
     while (1)
     {
         NVIC_DisableIRQ(ATIM_IRQn);
         BSP_ADC_Convert(&adc);
-        vbus = BSP_ADC_ReadVbus();
         NVIC_EnableIRQ(ATIM_IRQn);
 
         duty = AdcToDuty(adc);
-        BSP_BEMF_SetVbus(vbus);
 
         key_ev = BSP_KEY_GetEvent();
         if (key_ev == KEY_EVT_PRESS)
         {
-            if (motor_on != 0U)
-            {
-                motor_on = 0U;
-            }
-            else
-            {
-                motor_on = 1U;
-            }
+            motor_on = (motor_on != 0U) ? 0U : 1U;
             Motor_SetEnable(motor_on, duty, adc);
             duty_last = duty;
         }
 
-        if (BSP_BEMF_GetState() == BEMF_ST_FAULT)
+        if (BSP_HFI_GetState() == HFI_ST_FAULT)
         {
             if (motor_on != 0U)
             {
                 motor_on = 0U;
                 BSP_LED_Off();
-                printf("MOTOR FAULT miss=%u zc=%u — press KEY to retry\r\n",
-                       (unsigned int)BSP_BEMF_GetMissCnt(),
-                       (unsigned int)BSP_BEMF_GetZcCnt());
+                printf("MOTOR FAULT miss=%u lock=%u — press KEY to retry\r\n",
+                       (unsigned int)BSP_HFI_GetMissCnt(),
+                       (unsigned int)BSP_HFI_GetLockCnt());
             }
         }
 
@@ -213,13 +202,13 @@ int main(void)
             if (duty != duty_last)
             {
                 duty_last = duty;
-                BSP_BEMF_SetDuty(duty);
+                BSP_HFI_SetDuty(duty);
             }
 
             s_dbg_div++;
-            if ((BSP_BEMF_GetState() != (BemfState_t)s_st_last) || (s_dbg_div >= 4000U))
+            if ((BSP_HFI_GetState() != (HfiState_t)s_st_last) || (s_dbg_div >= 4000U))
             {
-                s_st_last = (uint8_t)BSP_BEMF_GetState();
+                s_st_last = (uint8_t)BSP_HFI_GetState();
                 s_dbg_div = 0U;
                 DBG_UpdateMbox(motor_on, duty, adc);
             }
