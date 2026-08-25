@@ -2,13 +2,14 @@
  * @file    BSP_foc.c
  * @brief   FOC 电流环 + d 轴方波 HFI 位置 PLL
  *
- * 峰值中断采样三相 INA180 (下桥全开窗). INA180 单向, I = offset - adc
- * (分流上为正对应相电流从电机回流).
+ * 峰值中断采样三相 INA180 (下桥全开窗). INA180 单向, I = offset - adc.
+ * sin/cos 用片上 CORDIC (q1.15, 与 ADC 并行).
  * HFI 电压加在 Id PI 之后, 避免电流环把注入打掉.
  */
 #include "BSP_foc.h"
 #include "BSP_motor.h"
 #include "BSP_adc.h"
+#include "cw32l012_cordic.h"
 
 #define Q15_MUL(a, b)       ((int16_t)(((int32_t)(a) * (int32_t)(b)) >> 15))
 #define SQRT3_2             28378   /* 0.866025 * 32768 */
@@ -26,41 +27,7 @@
 #define OC_LIM              1800
 #define HFI_KP              6
 #define HFI_KI              1
-
-static const int16_t s_sin[256] = {
-        0,    804,   1608,   2410,   3212,   4011,   4808,   5602,
-     6393,   7179,   7962,   8739,   9512,  10278,  11039,  11793,
-    12539,  13279,  14010,  14732,  15446,  16151,  16846,  17530,
-    18204,  18868,  19519,  20159,  20787,  21403,  22005,  22594,
-    23170,  23731,  24279,  24811,  25329,  25832,  26319,  26790,
-    27245,  27683,  28105,  28510,  28898,  29268,  29621,  29956,
-    30273,  30571,  30852,  31113,  31356,  31580,  31785,  31971,
-    32137,  32285,  32412,  32521,  32609,  32678,  32728,  32757,
-    32767,  32757,  32728,  32678,  32609,  32521,  32412,  32285,
-    32137,  31971,  31785,  31580,  31356,  31113,  30852,  30571,
-    30273,  29956,  29621,  29268,  28898,  28510,  28105,  27683,
-    27245,  26790,  26319,  25832,  25329,  24811,  24279,  23731,
-    23170,  22594,  22005,  21403,  20787,  20159,  19519,  18868,
-    18204,  17530,  16846,  16151,  15446,  14732,  14010,  13279,
-    12539,  11793,  11039,  10278,   9512,   8739,   7962,   7179,
-     6393,   5602,   4808,   4011,   3212,   2410,   1608,    804,
-        0,   -804,  -1608,  -2410,  -3212,  -4011,  -4808,  -5602,
-    -6393,  -7179,  -7962,  -8739,  -9512, -10278, -11039, -11793,
-   -12539, -13279, -14010, -14732, -15446, -16151, -16846, -17530,
-   -18204, -18868, -19519, -20159, -20787, -21403, -22005, -22594,
-   -23170, -23731, -24279, -24811, -25329, -25832, -26319, -26790,
-   -27245, -27683, -28105, -28510, -28898, -29268, -29621, -29956,
-   -30273, -30571, -30852, -31113, -31356, -31580, -31785, -31971,
-   -32137, -32285, -32412, -32521, -32609, -32678, -32728, -32757,
-   -32767, -32757, -32728, -32678, -32609, -32521, -32412, -32285,
-   -32137, -31971, -31785, -31580, -31356, -31113, -30852, -30571,
-   -30273, -29956, -29621, -29268, -28898, -28510, -28105, -27683,
-   -27245, -26790, -26319, -25832, -25329, -24811, -24279, -23731,
-   -23170, -22594, -22005, -21403, -20787, -20159, -19519, -18868,
-   -18204, -17530, -16846, -16151, -15446, -14732, -14010, -13279,
-   -12539, -11793, -11039, -10278,  -9512,  -8739,  -7962,  -7179,
-    -6393,  -5602,  -4808,  -4011,  -3212,  -2410,  -1608,   -804
-};
+#define CORDIC_BUSY_TO      64U
 
 typedef struct
 {
@@ -89,14 +56,50 @@ static int16_t  s_w_if = IF_W_START;
 static Pi_t     s_pi_d = { 24, 2, 0, V_LIM };
 static Pi_t     s_pi_q = { 24, 2, 0, V_LIM };
 
-static int16_t SinQ15(uint16_t th)
+/*
+ * FOC θ: uint16 0..65535 = 0..2π
+ * CORDIC z 单位为 π, q1.15 范围 [-1,1) = [-π, π)
+ * 把 θ 当 int16 即把 [π, 2π) 折到 [-π, 0)
+ */
+static void CordicInit(void)
 {
-    return s_sin[th >> 8];
+    cordic_init_t init;
+
+    init.func    = CORDIC_FUNC_COS;
+    init.scale   = 0U;
+    init.format  = CORDIC_FORMAT_Q1_15;
+    init.iter    = CORDIC_ITER_16; /* 16 次 ≈ 18 HCLK */
+    init.comp    = 0U;
+    init.ie      = 0U;
+    init.dmaeoc  = 0U;
+    init.dmaidle = 0U;
+    CORDIC_Init(&init);
 }
 
-static int16_t CosQ15(uint16_t th)
+static void CordicStartSinCos(uint16_t th)
 {
-    return s_sin[(uint8_t)((th >> 8) + 64U)];
+    /* 单输入运算: 写 Z 启动; FUNC=cos 时 X=cos(z), Y=sin(z) */
+    CW_CORDIC->Z = (int32_t)(int16_t)th;
+}
+
+static void CordicReadSinCos(int16_t *cs, int16_t *sn)
+{
+    uint32_t to = CORDIC_BUSY_TO;
+
+    while ((CW_CORDIC->CSR_f.BUSY != 0U) && (to > 0U))
+    {
+        to--;
+    }
+
+    if (to == 0U)
+    {
+        *cs = 32767;
+        *sn = 0;
+        return;
+    }
+
+    *cs = (int16_t)CW_CORDIC->X;
+    *sn = (int16_t)CW_CORDIC->Y;
 }
 
 static int16_t Clamp16(int32_t v, int16_t lim)
@@ -213,6 +216,7 @@ void BSP_FOC_Init(void)
     s_theta = 0U;
     s_iq_cmd = 0;
     s_tick = 0U;
+    CordicInit();
 }
 
 void BSP_FOC_Start(uint16_t iq_cmd)
@@ -280,9 +284,14 @@ void BSP_FOC_PwmIrqHandler(void)
     s_tick++;
     s_state_t++;
 
+    th = s_theta;
+    CordicStartSinCos(th);
+
     iu = ReadPhaseI(BSP_ADC_IU_CH, s_i_off[0]);
     iv = ReadPhaseI(BSP_ADC_IV_CH, s_i_off[1]);
     iw = ReadPhaseI(BSP_ADC_IW_CH, s_i_off[2]);
+
+    CordicReadSinCos(&cs, &sn);
 
     if ((iu > OC_LIM) || (iu < -OC_LIM) ||
         (iv > OC_LIM) || (iv < -OC_LIM) ||
@@ -295,9 +304,6 @@ void BSP_FOC_PwmIrqHandler(void)
     ial = (int16_t)((((int32_t)iu * 2 - iv - iw) * ONE_THIRD) >> 15);
     ibe = (int16_t)((((int32_t)iv - iw) * ONE_SQRT3) >> 15);
 
-    th = s_theta;
-    cs = CosQ15(th);
-    sn = SinQ15(th);
     id = (int16_t)(Q15_MUL(ial, cs) + Q15_MUL(ibe, sn));
     iq = (int16_t)(Q15_MUL(ibe, cs) - Q15_MUL(ial, sn));
     s_id = id;
@@ -364,8 +370,8 @@ void BSP_FOC_PwmIrqHandler(void)
     s_hf_sign = (int8_t)(-s_hf_sign);
 
     VoltLimit(&ud, &uq);
-    ual = (int16_t)(Q15_MUL(ud, CosQ15(s_theta)) - Q15_MUL(uq, SinQ15(s_theta)));
-    ube = (int16_t)(Q15_MUL(ud, SinQ15(s_theta)) + Q15_MUL(uq, CosQ15(s_theta)));
+    ual = (int16_t)(Q15_MUL(ud, cs) - Q15_MUL(uq, sn));
+    ube = (int16_t)(Q15_MUL(ud, sn) + Q15_MUL(uq, cs));
     Svpwm(ual, ube);
 }
 
