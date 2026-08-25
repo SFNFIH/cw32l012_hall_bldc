@@ -5,7 +5,7 @@ from pathlib import Path
 from pyocd.core.helpers import ConnectHelper
 from elftools.elf.elffile import ELFFile
 
-ELF = Path("build/Debug/cw32l012_pwm_dma.elf")
+ELF = Path("build/Debug/cw32l012_hall_bldc.elf")
 LOG = Path("debug-49b1f2.log")
 SESSION = "49b1f2"
 MAGIC = 0x49B1DB60

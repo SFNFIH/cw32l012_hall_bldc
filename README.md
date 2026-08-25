@@ -6,7 +6,7 @@
 [![Toolchain](https://img.shields.io/badge/Toolchain-GCC%20ARM-green)](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain)
 [![Build](https://img.shields.io/badge/Build-CMake%20%2B%20Ninja-orange)](https://cmake.org/)
 
-仓库：https://github.com/SFNFIH/cw32l012_cmake  
+仓库：https://github.com/SFNFIH/cw32l012_hall_bldc  
 里程碑标签：`电机成功转动`
 
 ---
@@ -89,16 +89,14 @@ cmake --build build/Debug
 
 | 文件 | 用途 |
 |------|------|
-| `cw32l012_pwm_dma.elf` | 调试 |
-| `cw32l012_pwm_dma.hex` / `.bin` | 烧录 |
-
-（工程名沿用历史 `cw32l012_pwm_dma`，实际为霍尔电机工程。）
+| `cw32l012_hall_bldc.elf` | 调试 |
+| `cw32l012_hall_bldc.hex` / `.bin` | 烧录 |
 
 ### 烧录
 
 ```bash
 # 推荐：指定 ELF
-python flash_cw32.py build/Debug/cw32l012_pwm_dma.elf
+python flash_cw32.py build/Debug/cw32l012_hall_bldc.elf
 
 # 或 OpenOCD 目标（需本机已配置 OPENOCD 路径）
 cmake --build build/Debug -t flash

@@ -11,7 +11,7 @@ MBOX = 0x2000008C  # may change after rebuild; prefer symbol
 
 def main():
     from elftools.elf.elffile import ELFFile
-    elf = Path("build/Debug/cw32l012_pwm_dma.elf")
+    elf = Path("build/Debug/cw32l012_hall_bldc.elf")
     addr = MBOX
     with open(elf, "rb") as f:
         e = ELFFile(f)

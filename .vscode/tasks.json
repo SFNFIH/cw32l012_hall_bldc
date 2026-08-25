@@ -16,7 +16,7 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "cd /d ${workspaceFolder} && cmake --build build/Debug && python flash_cw32.py build/Debug/cw32l012_pwm_dma.elf"
+                "cd /d ${workspaceFolder} && cmake --build build/Debug && python flash_cw32.py build/Debug/cw32l012_hall_bldc.elf"
             ],
             "group": "build",
             "presentation": { "reveal": "always" },
@@ -28,7 +28,7 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "cd /d ${workspaceFolder} && cmake --build build/Release && python flash_cw32.py build/Release/cw32l012_pwm_dma.elf"
+                "cd /d ${workspaceFolder} && cmake --build build/Release && python flash_cw32.py build/Release/cw32l012_hall_bldc.elf"
             ],
             "group": "build",
             "presentation": { "reveal": "always" },
@@ -40,7 +40,7 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "cd /d ${workspaceFolder} && python flash_cw32.py build/Debug/cw32l012_pwm_dma.elf"
+                "cd /d ${workspaceFolder} && python flash_cw32.py build/Debug/cw32l012_hall_bldc.elf"
             ],
             "group": "build",
             "presentation": { "reveal": "always" },
