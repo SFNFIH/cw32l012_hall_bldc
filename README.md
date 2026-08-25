@@ -1,13 +1,16 @@
-# CW32L012 霍尔六步 BLDC 驱动
+# CW32L012 无感 FOC（高频注入）
 
-基于 **CW32L012** 的有感 BLDC 六步换相示例：HALLTIM 霍尔接口 + ATIM 三相互补 PWM，按键启停、电位器调速。
+基于 **CW32L012** 的 PMSM/BLDC **磁场定向控制**：三相互补 SVPWM、Id/Iq 电流环，d 轴 **10 kHz 方波高频注入** + PLL 估角。
 
 [![MCU](https://img.shields.io/badge/MCU-CW32L012x8-blue)](https://www.whxy.com)
 [![Toolchain](https://img.shields.io/badge/Toolchain-GCC%20ARM-green)](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain)
 [![Build](https://img.shields.io/badge/Build-CMake%20%2B%20Ninja-orange)](https://cmake.org/)
 
-仓库：https://github.com/SFNFIH/cw32l012_hall_bldc  
-里程碑标签：`电机成功转动`
+仓库：https://github.com/SFNFIH/cw32l012_hall_bldc
+
+相对六步 HFI：三相不再浮空，全程正弦调制；位置来自注入电流的 q 轴分量，而不是反电势。
+
+给入门看的运行结构（上电、主循环、PWM 中断、状态机、串口字段）写在 **[Doc/程序运行结构.md](Doc/程序运行结构.md)**。
 
 ---
 
@@ -15,129 +18,70 @@
 
 | 模块 | 说明 |
 |------|------|
-| **换相** | HALLTIM 霍尔变化中断触发六步换相；换相后短空白忽略 1 次边沿，抑制抖边 |
-| **PWM** | ATIM 中央对齐互补 PWM，约 20 kHz（PCLK=8 MHz，ARR=199） |
-| **下桥** | 导通下桥相：`CCxE+CCxNE` + `FORCED_INACTIVE`（仅开 `CCxNE` 时实测无输出） |
-| **调速** | PA07 ADC 电位器 → 占空比（下限 16，上限 170） |
-| **启停** | PC13 按键切换运行；LED(PB09) 指示运行状态 |
-| **调试串口** | UART1 @ 115200（PC14/PC15，`CR2.SWAP`），打印霍尔/占空比等 |
+| **ALIGN** | Ud 固定、θ=0，约 200 ms 把转子拉到 d 轴 |
+| **I-F** | 电流闭环 + 开环升频（θ 斜坡），同时开 HFI PLL |
+| **RUN** | θ 改由 PLL；电位器给定 **Iq** |
+| **HFI** | 每个 FOC 周期翻转 d 轴注入电压；`sign·Iq` 低通后作位置误差 |
+| **CORDIC** | 片上硬件算 sin/cos（q1.15，与 ADC 并行）；Park / 反 Park 共用一次结果 |
+| **EAU** | 片上硬件 32 位开方 / 有符号除法，做 Ud/Uq 电压圆限制 |
+| **采样** | PWM **峰值**（下桥全开）采 PA00/01/02 三电阻 |
+| **PWM** | ATIM 中央对齐三相互补，20 kHz，死区约 2 µs |
+| **启停** | PC13；LED PB09 |
+| **VOFA+** | 串口 JustFloat，10 ms 一帧：Id/Iq/θ/HFI/状态 |
+
+霍尔只观测，不参与控制。
 
 ### 引脚
 
 | 信号 | 引脚 | 说明 |
 |------|------|------|
-| 电机 U/V/W 上桥 | PA08 / PA09 / PA10 | ATIM CH1/2/3 |
-| 电机 U/V/W 下桥 | PB13 / PB14 / PB15 | ATIM CH1N/2N/3N |
-| 霍尔 H1/H2/H3 | PB02 / PB10 / PB11 | HALLTIM CH1/2/3 |
-| 调速电位器 | PA07 | ADC1 IN7 |
-| 启停按键 | PC13 | 按下=高，内部下拉 |
-| 运行指示灯 | PB09 | 高电平点亮 |
-| 调试 UART | PC14 / PC15 | 经 DAPLink VCP（常用 COM5） |
+| 相 W/V/U 上桥 | PA08 / PA09 / PA10 | ATIM CH1 / CH2 / CH3 |
+| 相 W/V/U 下桥 | PB13 / PB14 / PB15 | ATIM CH1N / CH2N / CH3N |
+| 电流 U/V/W | PA00 / PA01 / PA02 | INA180 + 下桥分流 |
+| 调速 | PA07 | 映射为 Iq 给定 |
+| 按键 | PC13 | 启停 |
+| UART | PC14 / PC15 | 115200 |
 
-### 六步表（霍尔 bit0=H1, bit1=H2, bit2=H3）
-
-正向序列：`001 → 011 → 010 → 110 → 100 → 101 → 001`  
-每步两相导通（一相互补 PWM，一相下桥常开），第三相浮空。
-
----
-
-## 项目结构
-
-```
-.
-├── BSP/                 # 板级驱动
-│   ├── BSP_motor.*      # ATIM 六步换相 / 互补 PWM
-│   ├── BSP_halltim.*    # 霍尔接口与 IRQ 换相
-│   ├── BSP_adc.*        # PA07 调速采样
-│   ├── BSP_key.*        # PC13 + BTIM1 扫描
-│   ├── BSP_led.*        # PB09
-│   └── BSP_usart.*      # UART1 调试口
-├── USER/
-│   ├── inc/             # main.h, interrupts
-│   └── src/             # main, 中断, 时钟 override
-├── Libraries/           # CW32L012 标准外设库
-├── Board/               # 板级定义
-├── cmake/               # gcc-arm-none-eabi 工具链
-├── flash_cw32.py        # pyOCD 烧录
-├── capture_uart.py      # 串口抓取调试行
-├── debug_probe_log.py   # SWD 读调试邮箱
-├── dump_atim.py         # 读 ATIM 寄存器
-├── CMakeLists.txt
-├── CMakePresets.json
-├── cw32l012_flash.ld
-└── startup_cw32l012x8.s
-```
+PCB：PA08→`OUT_W`，PA09→`OUT_V`，PA10→`OUT_U`。
 
 ---
 
 ## 构建与烧录
 
-### 前置条件
-
-- `arm-none-eabi-gcc`
-- CMake ≥ 3.22、Ninja
-- pyOCD（推荐）或 OpenOCD；CMSIS-DAP / DAPLink
-
-### 构建
-
 ```bash
 cmake --preset Debug
 cmake --build build/Debug
-```
-
-产物在 `build/Debug/`：
-
-| 文件 | 用途 |
-|------|------|
-| `cw32l012_hall_bldc.elf` | 调试 |
-| `cw32l012_hall_bldc.hex` / `.bin` | 烧录 |
-
-### 烧录
-
-```bash
-# 推荐：指定 ELF
 python flash_cw32.py build/Debug/cw32l012_hall_bldc.elf
-
-# 或 OpenOCD 目标（需本机已配置 OPENOCD 路径）
-cmake --build build/Debug -t flash
 ```
-
-烧录时请关闭占用 DAPLink 串口的程序，避免 SWD 抢占失败。
 
 ---
 
 ## 使用方法
 
-1. 接线按上表连接电机桥臂、霍尔、电位器与按键。
-2. 烧录后复位；上电默认 **停机**。
-3. **PC13** 按一下启动（LED 亮），再按停止。
-4. **PA07** 调节转速；建议先中速，再慢慢升高。
-5. 可选：串口 115200 查看 `DBG hall=... duty=...` 行。
+1. 接三相桥臂与分流。霍尔可悬空。
+2. **PC13** 启动：`ALIGN` → `IF` → `RUN`。
+3. **PA07** 在 `RUN` 后调 Iq（转矩/转速）。
+4. 过流会 `FAULT`，再按键重试。
+5. 串口接 **VOFA+**（115200，协议选 **JustFloat**），通道：
 
-```bash
-python capture_uart.py COM5 115200 20
-```
+| CH | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|----|---|---|---|---|---|---|---|---|
+| 量 | id | iq | iqref | θ° | dem | w | state | hall |
 
----
+`state`：0=IDLE，1=ALIGN，2=IF，3=RUN，4=FAULT。上电后即使没按键也会出波形，用来确认连上了。
 
-## 关键参数
-
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| HCLK / PCLK | 8 MHz | HSI / 12，PCLK 不分频 |
-| PWM | ≈ 20 kHz | 中央对齐，ARR=199，死区 ≈ 2 µs |
-| 霍尔滤波 FLT2 | ≈ 250 µs | PCLK=8 MHz，`FLT2LEN=2000` |
-| 占空比 | 16 ~ 170 | 相对 ARR，避免顶满常通 |
-| UART | 115200 8N1 | 调试打印 |
+若要改回文本 `DBG st=...`，把 `USER/src/main.c` 里的 `APP_VOFA_ENABLE` 设成 `0`。
 
 ---
 
-## 注意事项
+## 注意
 
-- CW32L012 为 **Cortex-M0+**，`InitTick()` 直接配置 SysTick，不写不可用的 `SCB->SHP`。
-- 下桥必须 **双使能 + Forced Inactive**，仅 `CCxNE=1` 时 CHN 可能一直为低。
-- 霍尔顺序若与电机绕组不匹配，会出现无力矩或反转，需核对接线或调整 `s_step_table`。
-- 高速边界抖边可能导致来回换向；当前用换相后忽略 1 次边沿缓解，可按实机再调滤波/空白。
+- MCU 仅 **8 MHz Cortex-M0+**。Park 用 CORDIC（16 次迭代 ≈ 18 HCLK），电压圆限制用 EAU（sqrt 17 HCLK，除法 2–35 HCLK）。电流 PI / `HFI_V` 在 `BSP_foc.c` 微调。
+- CORDIC 角度单位为 π：FOC 的 16 位 θ 按有符号 q1.15 写入 Z（[π,2π) 折到 [-π,0)）。
+- EAU 只在 PWM 峰值 ISR 的 `VoltLimit` 里用，避免和主循环抢同一外设。SVM / PI 的移位缩放比硬件除法更便宜，不替换。
+- 板载 **INA180 单向**，负电流会削顶，FOC 精度受此限制。
+- 表贴磁钢凸极弱时 PLL 可能锁不稳，电机会停在 I-F 开环角；可加大 `HFI_V` 或加长 `IF_TICKS`。
+- 下桥必须互补 PWM；峰值采样对应 PWM1 的关断中心。
 
 ---
 

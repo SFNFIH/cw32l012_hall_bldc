@@ -24,6 +24,7 @@ extern "C"
 #include "BSP_motor.h"
 #include "BSP_key.h"
 #include "BSP_adc.h"
+#include "BSP_foc.h"
 
 #ifdef __cplusplus
 }

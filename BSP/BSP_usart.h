@@ -57,6 +57,16 @@ void BSP_USART_DeInit(void);
 void BSP_USART_SendByte(uint8_t ch);
 
 /**
+ * @brief  发送原始字节 (阻塞)
+ */
+void BSP_USART_SendBuf(const uint8_t *buf, uint32_t len);
+
+/**
+ * @brief  VOFA+ JustFloat: 连续小端 float + 帧尾 00 00 80 7F
+ */
+void BSP_USART_SendJustFloat(const float *data, uint32_t ch_count);
+
+/**
  * @brief  发送字符串 (阻塞, 遇 '\\0' 结束)
  */
 void BSP_USART_SendString(const char *str);

@@ -15,7 +15,7 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include "..\inc\main.h"
+#include "../inc/main.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -250,7 +250,7 @@ void ADC1_IRQHandler(void)
 void ATIM_IRQHandler(void)
 {
     /* USER CODE BEGIN */
-
+    BSP_FOC_PwmIrqHandler();
     /* USER CODE END */
 }
 
