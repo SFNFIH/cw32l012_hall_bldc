@@ -198,8 +198,7 @@ uint8_t BSP_HALLTIM_ApplyHall(uint8_t hall, uint8_t do_commutate)
     g_hall_state = hall;
     if (do_commutate != 0U)
     {
-        BSP_MOTOR_Commutate(hall);
-        s_blank_left = 1U; /* 忽略紧随其后的 1 次抖边 */
+        s_blank_left = 1U;
         /* #region agent log */
         if (g_hall_ok_cnt < 0xFFFFU)
         {
