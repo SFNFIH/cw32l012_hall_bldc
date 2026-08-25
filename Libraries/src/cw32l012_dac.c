@@ -31,7 +31,7 @@
 */
 
 /* Includes ------------------------------------------------------------------*/
-#include "cw32L012_sysctrl.h"
+#include "cw32l012_sysctrl.h"
 #include "cw32l012_dac.h"
 
 /* Private_TypesDefinitions --------------------------------------------------*/

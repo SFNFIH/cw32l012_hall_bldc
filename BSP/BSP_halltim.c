@@ -32,6 +32,7 @@ static const uint8_t s_next_bw[8] = {
 
 /* 换相后忽略接下来 N 次 CHG, 抑制边界来回抖 */
 static uint8_t s_blank_left = 0U;
+static uint8_t s_auto_comm = 1U;
 
 static void BSP_HALLTIM_GPIO_Init(void)
 {
@@ -222,7 +223,7 @@ void BSP_HALLTIM_IRQHandler(void)
             g_hall_irq_cnt++;
         }
         /* #endregion */
-        if (BSP_MOTOR_IsRunning() != 0U)
+        if ((s_auto_comm != 0U) && (BSP_MOTOR_IsRunning() != 0U))
         {
             (void)BSP_HALLTIM_ApplyHall(hall, 1U);
         }
@@ -264,4 +265,9 @@ void BSP_HALLTIM_ResetDirection(void)
     g_hall_skip_cnt = 0U;
     g_hall_irq_cnt = 0U;
     g_hall_ok_cnt = 0U;
+}
+
+void BSP_HALLTIM_SetAutoCommutate(uint8_t enable)
+{
+    s_auto_comm = (enable != 0U) ? 1U : 0U;
 }

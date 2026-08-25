@@ -134,7 +134,8 @@ void BSP_MOTOR_Init(uint32_t pclk_hz)
     tim.CounterOPMode     = ATIM_OP_MODE_REPETITIVE;
     tim.Prescaler         = 0U;
     tim.ReloadValue       = BSP_MOTOR_PWM_ARR;
-    tim.RepetitionCounter = 0U;
+    /* RCR=1: 中央对齐下溢+溢出各计一次, UIF 每 PWM 周期一次 */
+    tim.RepetitionCounter = 1U;
     ATIM_Init(&tim);
 
     oc.OCPolarity        = ATIM_OCPOLARITY_NONINVERT;
@@ -258,4 +259,28 @@ void BSP_MOTOR_Stop(void)
 uint8_t BSP_MOTOR_IsRunning(void)
 {
     return s_running;
+}
+
+/* 正向: 001 → 011 → 010 → 110 → 100 → 101 */
+static const uint8_t s_step_to_hall[6] = {
+    0x01U, 0x03U, 0x02U, 0x06U, 0x04U, 0x05U
+};
+
+uint8_t BSP_MOTOR_StepToHall(uint8_t step)
+{
+    return s_step_to_hall[step % 6U];
+}
+
+void BSP_MOTOR_CommutateStep(uint8_t step)
+{
+    BSP_MOTOR_Commutate(BSP_MOTOR_StepToHall(step));
+}
+
+void BSP_MOTOR_EnablePwmIrq(void)
+{
+    ATIM_ClearITPendingBit(ATIM_STATE_UIF);
+    ATIM_ITConfig(ATIM_IT_UIE, ENABLE);
+    NVIC_ClearPendingIRQ(ATIM_IRQn);
+    NVIC_SetPriority(ATIM_IRQn, 0U);
+    NVIC_EnableIRQ(ATIM_IRQn);
 }

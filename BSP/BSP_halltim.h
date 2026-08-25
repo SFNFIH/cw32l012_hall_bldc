@@ -50,6 +50,12 @@ uint8_t BSP_HALLTIM_ApplyHall(uint8_t hall, uint8_t do_commutate);
 void BSP_HALLTIM_NoteTransition(uint8_t hall);
 void BSP_HALLTIM_ResetDirection(void);
 
+/**
+ * @brief  霍尔中断是否自动换相 (无感运行时关掉, 避免抢 ATIM)
+ * @param  enable  1=IRQ 内换相, 0=仅更新 g_hall_state
+ */
+void BSP_HALLTIM_SetAutoCommutate(uint8_t enable);
+
 #ifdef __cplusplus
 }
 #endif

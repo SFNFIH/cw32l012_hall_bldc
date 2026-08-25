@@ -11,6 +11,7 @@
 #include "cw32l012_gpio.h"
 #include "cw32l012_sysctrl.h"
 #include "cw32l012_atim.h"
+#include "cw32l012.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +44,22 @@ void BSP_MOTOR_Stop(void);
  * @param  hall  滤波后霍尔状态
  */
 void BSP_MOTOR_Commutate(uint8_t hall);
+
+/**
+ * @brief  按六步序号换相 (与有感正向序列相同)
+ * @param  step  0..5 → hall 001,011,010,110,100,101
+ */
+void BSP_MOTOR_CommutateStep(uint8_t step);
+
+/**
+ * @brief  使能 ATIM 更新中断 (中央对齐 RCR=1, 每 PWM 周期一次, 20 kHz)
+ */
+void BSP_MOTOR_EnablePwmIrq(void);
+
+/**
+ * @brief  六步序号 → 霍尔码
+ */
+uint8_t BSP_MOTOR_StepToHall(uint8_t step);
 
 /**
  * @brief  设置三相占空比 (0 ~ ARR)
